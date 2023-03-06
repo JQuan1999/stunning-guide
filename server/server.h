@@ -14,32 +14,51 @@
 #include <cstring>
 #include <unistd.h>
 #include <iostream>
+#include <memory>
 #include <unordered_map>
+#include <functional>
 
 #include "../http_conn/http_conn.h"
+#include "../pool/thread_pool.h"
+#include "../http_conn/http_enum.h"
 #include "m_epoll.h"
 
 class server
 {
+
 public:
-    server(int trigMode = 0);
+    server(event_type listen_event , event_type connfd_event, std::string root_path = "/");
     ~server();
 
     void initSocket();
     void run();
-    void acceptClientResquest(); // 接受客户连接
+    void _acceptClientResquest(); // 接受客户连接
+
+    httpConn& getHttpConn(int); // 取出users信息
+
 private:
-    void initEventMode(); // 初始化listen_fd和connfd事件触发模式
-    int setNoBlocking(int fd); // 设置非阻塞
+    void _initEventMode(); // 初始化listen_fd和connfd事件触发模式
+    int _setNoBlocking(int fd); // 设置非阻塞
+    void _addClient(int fd, sockaddr_in client_address); // 添加文件描述符
+    void _removeClient(int fd); // 移除文件描述符
+    void _dealRead(int fd); // 处理fd的可读事件
+    void _onRead(int fd);
+    void _dealWrite(int fd); // 处理fd的可写事件
+    void _onWrite(int fd);
+    void _onProcess(int fd); 
+
 private:
     int listen_fd; // 监听的文件描述符
     int epoll_fd; // epoll监听文件描述符
     int pipefd[2]; // 接受信号处理的管道
+    std::string root_path;
     event_type listenfd_ev_mode;
     event_type connfd_ev_mode;
     std::unordered_map<int, httpConn> users; // 保存文件描述符到客户连接请求的哈希表users
     // 智能指针实现
-    m_epoll* m_epollPtr;
+    std::unique_ptr<m_epoll> m_epoll_ptr;
+    std::unique_ptr<thread_pool> t_pool;
+    std::function<void(void)> task; // 由线程池进行处理的任务
 };
 
 #endif
