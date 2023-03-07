@@ -16,7 +16,7 @@ int main()
 {
     event_type mode1 = EPOLLIN;
     event_type mode2 = EPOLLET | EPOLLONESHOT;
-    server web_server(mode1, mode2, 1);
+    server web_server(mode1, mode2, 2);
     web_server.run();
     return 0;
 }

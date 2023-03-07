@@ -46,8 +46,10 @@ HTTP_CODE http_request::parser(buffer& buf)
         }
         std::string line = buf.dealToString(pos - buf.getReadPos() + 2);
         line.erase(line.end() - 2, line.end()); // 删除\r\n
-        // 空行
-        if(line.size() == 0){
+        // 空行 头部已解析完毕
+        if(line.size() == 0 && check_state == HEADER)
+        {
+            check_state = CONTENT;
             continue;
         }
         switch (check_state)
@@ -56,6 +58,8 @@ HTTP_CODE http_request::parser(buffer& buf)
         case REQUEST_LINE:
             if(!parseRequestLine(line))
             {
+                // 调试信息
+                // std::cout <<"parseRequestLine error, buf data: " << buf<<std::endl;
                 check_state = FINISH;
                 return BAD_REQUEST;
             }else{
@@ -66,14 +70,16 @@ HTTP_CODE http_request::parser(buffer& buf)
         case HEADER:
             if(!parseRequestHead(line))
             {
+                // 调试信息
+                // std::cout <<"parseRequestLine error, buf data: " << buf<<std::endl;
                 check_state = FINISH;
                 return BAD_REQUEST;
-            }else{
-                check_state = CONTENT;
             }
             // 判断是否有content
-            if(buf.writeAbleBytes() <= 2)
+            if(buf.readAbleBytes() <= 2)
             {
+                std::cout<<"no content \n";
+                buf.delAll(); // 删除\r\n
                 check_state = FINISH;
                 return GET_REQUEST;
             }
@@ -82,6 +88,8 @@ HTTP_CODE http_request::parser(buffer& buf)
         case CONTENT:
             if(!parseContent(line))
             {
+                // 调试信息
+                std::cout <<"parseRequestLine error, buf data: " << buf<<std::endl;
                 check_state = FINISH;
                 return BAD_REQUEST;
             }
@@ -99,21 +107,27 @@ bool http_request::parseRequestLine(const std::string& request)
     // 正则表达式匹配每个()匹配一个字段, ^表示开始，$表示结束
     std::regex pattern("^([^ ]*) ([^ ]*) HTTP/([^ ]*)$");
     std::smatch sub_match;
-    if(std::regex_match(request, sub_match, pattern))
+    bool ret;
+    if(ret = std::regex_match(request, sub_match, pattern))
     {
         method = sub_match[1];
         url = sub_match[2];
         version = sub_match[3];
-        std::cout<<"method = "<<method <<"url: "<<url <<"version: "<<version<<"\n";
-        if(method != "GET" || method != "POST")
+        if(method != "GET" && method != "POST")
         {
-            return false;;
+            ret = false;
         }
-        return true;
     }
-    // 解析出错
-    std::cout<<"parser error\n";
-    return false;
+    if(ret)
+    {
+        std::cout<<"method: "<<method <<", url: "<<url <<", version: "<<version<<"\n";
+    }
+    else
+    {
+        // 解析出错
+        std::cout<<"parser error, request line: "<<request<<std::endl;
+    }
+    return ret;
 }
 
 
@@ -124,9 +138,13 @@ bool http_request::parseRequestHead(const std::string& line)
     std::smatch sub_match;
     if(std::regex_match(line, sub_match, pattern))
     {
-        headers[sub_match[0]] = sub_match[1];
+        headers[sub_match[1]] = sub_match[2];
+        // 调试信息
+        // std::cout<<"key: "<<sub_match[1]<<" value: "<<sub_match[2]<<std::endl;
         return true;
     }
+    //调试信息
+    // std::cout<<"header parser error, line :"<<line<<std::endl;
     return false;
 }
 
@@ -134,8 +152,9 @@ bool http_request::parseRequestHead(const std::string& line)
 bool http_request::parseContent(const std::string& line)
 {
     body = line;
-    // 待做：解析post请求、日志打印
-    std::cout<<"request body = "<<body<<std::endl;
+    // 待做解析post请求
+    // 调试信息
+    // std::cout<<"request body: "<<body<<std::endl;
     return true;
 }
 

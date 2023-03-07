@@ -25,7 +25,7 @@ public:
     int find(char target);
     int find(std::string target);
 
-    bool empty();
+    bool empty() const;
 
     void deln(size_t);
     void delAll();
@@ -49,7 +49,8 @@ public:
 
     buffer& operator+(std::string);
     buffer& operator+=(std::string);
-    char operator[](size_t);
+    friend std::ostream& operator<<(std::ostream&, const buffer&);
+    char operator[](size_t) const;
 
 private:
     void _makeSpace(size_t len);

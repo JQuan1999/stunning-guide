@@ -27,7 +27,7 @@ class server
 {
 
 public:
-    server(event_type listen_event , event_type connfd_event, int threads = 8, std::string root_path = "/root/linux/webserver/src/");
+    server(event_type listen_event , event_type connfd_event, int threads = 8, std::string root_path = "./resource/");
     ~server();
 
     void initSocket();

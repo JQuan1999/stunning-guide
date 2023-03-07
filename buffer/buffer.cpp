@@ -125,7 +125,7 @@ void buffer::delAll()
     read_pos = write_pos = 0;
 }
 
-bool buffer::empty()
+bool buffer::empty() const
 {
     return read_pos == write_pos;
 }
@@ -192,14 +192,14 @@ int buffer::readFd(int fd, int& save_errno)
         write_pos += ret;
     }else{
         // 将buf中的数据append到_buf
-        write_pos = _buf.size(); // 已写道尾部
+        write_pos = _buf.size(); // 已在尾部
         append(buf, ret - writeable);
     }
-    if(ret > 0)
-    {
-        std::string str(peek(), peek() + ret);
-        std::cout<<"read "<<ret<<"bytes data from client"<<"str: "<<str<<std::endl;
-    }
+    // if(ret > 0)
+    // {
+    //     std::string str(peek(), peek() + ret);
+    //     std::cout<<"read "<<ret<<"bytes data from client"<<"str: "<<str<<std::endl;
+    // }
     return ret;
 }
 
@@ -222,13 +222,29 @@ buffer& buffer::operator+(std::string str)
     append(str);
     return *this;
 }
+
 buffer& buffer::operator+=(std::string str)
 {
     append(str);
     return *this;
 }
 
-char buffer::operator[](size_t pos)
+std::ostream& operator<<(std::ostream& os, const buffer& buf)
+{
+    if(!buf.empty())
+    {
+        for(size_t pos = buf.read_pos; pos < buf.write_pos; pos++)
+        {
+            std::cout<<buf[pos];
+        }
+    }else
+    {
+        std::cout<<"empty";
+    }
+    return os;
+}
+
+char buffer::operator[](size_t pos) const
 {
     assert(pos >= read_pos && pos < write_pos);
     return _buf[pos];

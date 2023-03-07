@@ -81,7 +81,7 @@ void server::_addClient(int fd, sockaddr_in address)
     
     users[fd].init(fd, address, root_path);
     // log buffer
-    std::cout<<"accept connction fd: "<<fd<<" ip: "<<users[fd].getIp()<<" port: "<<users[fd].getPort()<<"\n";
+    std::cout<<"accept connction fd: "<<fd<<", ip: "<<users[fd].getIp()<<", port: "<<users[fd].getPort()<<"\n";
 
     m_epoll_ptr->addFd(fd, EPOLLIN | conn_mode);
     _setNoBlocking(fd);   
@@ -93,32 +93,30 @@ void server::_removeClient(int fd)
     // 待实现：移除定时器
     assert(m_epoll_ptr->removeFd(fd) != -1);
     // log buffer
-    std::cout<<"remove client fd: "<<fd<<" ip: "<<users[fd].getIp()<<" port: "<<users[fd].getPort()<<"\n";
+    std::cout<<"remove client fd: "<<fd<<", ip: "<<users[fd].getIp()<<", port: "<<users[fd].getPort()<<"\n";
     users[fd].closeData();
 }
 
 
 void server::_onRead(int fd)
 {
-    std::cout<<"on read 触发 fd: "<<fd<<"\n";
     int ret = 0, save_errno;
     ret = users[fd].httpRead(save_errno);
-    if(ret == -1)
+    // 小于0表示客户端已断开连接
+    // 正常返回值 = -1 且error = EAGAIN表示数据已读完
+    if(ret <= 0 && save_errno != EAGAIN)
     {
-        if(save_errno != EAGAIN)
-        {
-            _removeClient(fd);
-            return;
-        }
+        _removeClient(fd);
+        return;
     }
 
     if(users[fd].process())
     {
-        std::cout<<"数据读取完毕 注册写事件\n";
+        std::cout<<"fd: "<<fd<< " 数据读取完毕 注册写事件\n";
         m_epoll_ptr->modifyFd(fd, EPOLLOUT | conn_mode); // 加上conn_ev_type
     }else
     {
-        std::cout<<"数据未读完 继续进行读取\n";
+        std::cout<<"fd: "<<fd<<" 数据未读完 继续进行读取\n";
         m_epoll_ptr->modifyFd(fd, EPOLLIN | conn_mode);
     }
 }
@@ -149,10 +147,8 @@ void server::_dealWrite(int fd)
 
 void server::_onWrite(int fd)
 {
-    std::cout<<"on write 触发 fd = "<<fd<<"\n";
     int ret = 0, save_errno;
     ret = users[fd].httpWrite(save_errno);
-    std::cout<<"on write ret = "<<ret<<std::endl;
     if(ret == 0)
     {
         // 传输完成
@@ -162,20 +158,26 @@ void server::_onWrite(int fd)
             std::cout<<"fd: "<<fd <<" 数据发送完毕 注册读事件\n";
             return;
         }
-        std::cout<<"移除fd"<<fd<<"\n";
-        _removeClient(fd);
+        else{
+            std::cout<<"fd: "<<fd << " 数据发送完毕 关闭连接\n";
+            _removeClient(fd);
+        }
+        
     }
     else if(ret < 0)
     {
         if(save_errno == EAGAIN)
         {
             // 继续传输
-            std::cout<<"fd: "<<fd <<"数据未发送完 继续进行写\n";
+            std::cout<<"fd: "<<fd <<" 数据未发送完 继续进行写\n";
             m_epoll_ptr->modifyFd(fd, EPOLLOUT | conn_mode);
             return;
         }
-        std::cout<<"移除fd: "<<fd<<"\n";
-        _removeClient(fd);
+        else
+        {
+            std::cout<<"fd: "<<fd <<" 故障发生 关闭连接\n";
+            _removeClient(fd);
+        }
     }
 }
 

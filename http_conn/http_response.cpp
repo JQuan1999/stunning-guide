@@ -75,7 +75,7 @@ void http_response::init(HTTP_CODE http_code, bool keep_alive, std::string url, 
     }
 
     abs_file_path = root_path + request_file;
-    std::cout<<"file path = "<<abs_file_path<<"\n";
+    std::cout<<"request url: "<<url<<", root path: "<<root<< ", code:" <<code<< ", after modify the fact file path: "<<abs_file_path<<"\n";
 
     assert(stat(abs_file_path.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
 
@@ -128,7 +128,7 @@ void http_response::_writeHeader(buffer& write_buf)
     }
     
     // 文件类型(根据request_file文件类型回复content-type)
-    write_buf += "Content-type: html\r\n";
+    write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
     write_buf += "Content-Length: " + std::to_string(file_stat.st_size) + "\r\n\r\n";
 }
 

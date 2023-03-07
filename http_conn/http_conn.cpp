@@ -100,7 +100,7 @@ int httpConn::httpWrite(int& save_errno)
             write_buffer.deln(len);
         }
     }while(event_mode & EPOLLET);
-
+    
     return len;
 }
 
@@ -123,23 +123,23 @@ bool httpConn::process()
     {
         return false;
     }
+    // 读到完整的http请求 read_buf重新初始化 
+    read_buffer.delAll(); 
     // 根据解析的结果 初始化request
     m_response.init(code, m_request.isKeepAlive(), m_request.get_url(), root_path);
     m_response.response(write_buffer);
     
     // 响应头
     m_iv[0].iov_base = (char*)write_buffer.peek();
-    m_iv[0].iov_len = write_buffer.writeAbleBytes();
+    m_iv[0].iov_len = write_buffer.readAbleBytes();
     m_iv_cnt = 1;
 
-    if(m_response.getFileAddress() != nullptr && m_response.getFileBytes() != 0)
+    if(m_response.getFileAddress() && m_response.getFileBytes() > 0)
     {
         m_iv[1].iov_base = (char*)m_response.getFileAddress();
         m_iv[1].iov_len = m_response.getFileBytes();
         m_iv_cnt += 1;
     }
-
-    // 输出日志 cout<<...
 
     return true;
 }
