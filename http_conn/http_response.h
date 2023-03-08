@@ -8,6 +8,9 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <unordered_map>
+#include <fstream>
+#include <vector>
+#include <dirent.h>
 
 #include "http_enum.h"
 #include "../buffer/buffer.h"
@@ -26,6 +29,7 @@ public:
     const char* getFileAddress();
 
 private:
+    void _updateIndexHtml();
     void _writeStateLine(buffer&);
     void _writeHeader(buffer&);
     void _writeContent(buffer&);
@@ -35,6 +39,9 @@ private:
     std::string root_path; // 根目录文件路径
     std::string request_file; // 请求文件
     std::string abs_file_path; // 文件的绝对路径
+    static std::string file_dir;
+    static std::string index_html;
+    static std::string list_html;
 
     static std::unordered_map<int, std::string> code_status;
     static std::unordered_map<int, std::string> error_code_path;

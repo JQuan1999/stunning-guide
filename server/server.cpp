@@ -104,6 +104,7 @@ void server::_onRead(int fd)
     ret = users[fd].httpRead(save_errno);
     // 小于0表示客户端已断开连接
     // 正常返回值 = -1 且error = EAGAIN表示数据已读完
+    std::cout<<"fd: "<<fd <<"read data:\n "<<users[fd].getReadBuf();
     if(ret <= 0 && save_errno != EAGAIN)
     {
         _removeClient(fd);

@@ -51,6 +51,16 @@ const int httpConn::getPort()
     return port;
 }
 
+const buffer& httpConn::getReadBuf()
+{
+    return read_buffer;
+}
+
+const buffer& httpConn::getWriteBuf()
+{
+    return write_buffer;
+}
+
 int httpConn::httpRead(int& save_errno)
 {   
     int ret;

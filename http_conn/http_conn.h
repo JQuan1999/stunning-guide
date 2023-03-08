@@ -30,6 +30,8 @@ public:
     void closeData();
     const char* getIp();
     const int getPort();
+    const buffer& getReadBuf();
+    const buffer& getWriteBuf();
 
 private:
     bool _readProcess();

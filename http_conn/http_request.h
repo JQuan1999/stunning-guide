@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <regex>
 #include <iostream>
+#include <vector>
 
 #include "./http_request.h"
 #include "http_enum.h"    
@@ -40,11 +41,13 @@ private:
     CHECK_STATE check_state;
     HTTP_CODE http_code;
 
+    std::string mode; // get请求是上传还是下载
     std::string method; // 请求方式
     std::string url; // 请求地址
     std::string version; // http请求版本
     std::string body; // 请求内容
     std::unordered_map<std::string, std::string> headers;
+    std::unordered_map<std::string, std::string> post_former; // Post表单信息
 };
 
 #endif

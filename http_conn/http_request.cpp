@@ -14,9 +14,9 @@ http_request::~http_request()
 void http_request::init()
 {
     check_state = REQUEST_LINE;
-    method = url = version = body = "";
+    mode = method = url = version = body = "";
     headers.clear();
-    // post
+    post_former.clear();
 }
 
 CHECK_STATE http_request::getState()
@@ -121,6 +121,9 @@ bool http_request::parseRequestLine(const std::string& request)
     if(ret)
     {
         std::cout<<"method: "<<method <<", url: "<<url <<", version: "<<version<<"\n";
+        // 判断是否进行了删除或下载 找到第一个/作为分隔符
+        std::string tmp = url;
+        
     }
     else
     {
