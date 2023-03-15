@@ -20,7 +20,7 @@ class httpConn
 {
 public:
     httpConn();
-    void init(int connfd, sockaddr_in address, std::string root_path);
+    void init(int, sockaddr_in, const std::string&, uint32_t);
     ~httpConn();
     int httpRead(int&);
     bool parseHttpRequest();
@@ -35,28 +35,24 @@ public:
 
 private:
     bool _readProcess();
-    void _reset();
 
 private:
-
     struct sockaddr_in address;
-    struct iovec m_iv[2];
-    int m_iv_cnt;
     int sockfd;
     int port;
     char ip[20];
-    uint32_t event_mode; // 事件类型
+    std::string resource_dir;
+    uint32_t conn_mode; // 事件类型
 
-    size_t once_read_bytes; // 一次读取的最大字节
-
-    buffer read_buffer;
-    buffer write_buffer;
+    std::unique_ptr<buffer> read_buffer;
+    std::unique_ptr<buffer> write_buffer;
 
     std::string root_path; // 服务器根目录
 
-    http_request m_request; // 请求解析
-    http_response m_response; // 请求回复
-
+    std::unique_ptr<http_request> m_request; // 请求解析
+    std::unique_ptr<http_response> m_response; // 请求回复
+    struct iovec m_iv[2];
+    int m_iv_cnt;
 };
 
 #endif

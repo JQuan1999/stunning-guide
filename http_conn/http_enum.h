@@ -12,12 +12,6 @@ enum CHECK_STATE{
     FINISH
 };
 
-enum HTTP_TASK
-{
-    READ_TASK = 0,
-    WRITE_TASK,
-};
-
 // http状态
 enum HTTP_CODE{
     NO_REQUEST = 0, 

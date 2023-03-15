@@ -7,11 +7,13 @@
 #include <unordered_map>
 #include <regex>
 #include <iostream>
+#include <fstream>
 #include <vector>
+#include <sys/stat.h>
 
-#include "./http_request.h"
-#include "http_enum.h"    
+#include "../log/log.h"
 #include "../buffer/buffer.h"
+#include "http_enum.h"
 
 
 // http解析结果类
@@ -19,33 +21,34 @@ class http_request
 {
 public:
 
-    http_request();
+    http_request(const std::string&);
     ~http_request();
     void init();
     HTTP_CODE parser(buffer& buf);
     CHECK_STATE getState();
     bool isKeepAlive();
 
-    const std::string get_method();
-    const std::string get_url();
-    const std::string get_version();
-    const std::string get_head(const std::string);
-    const std::string get_body();
+    const std::string getMethod();
+    const std::string getUrl();
+    const std::string getVersion();
+    const std::string getHead(const std::string);
+    const std::string getMode();
 
 private:
     
     bool parseRequestLine(const std::string&);
     bool parseRequestHead(const std::string& );
-    bool parseContent(const std::string&);
+    bool parseContent(buffer&);
+    void _remove(const std::string&);
 
     CHECK_STATE check_state;
     HTTP_CODE http_code;
 
-    std::string mode; // get请求是上传还是下载
+    std::string res_dir; 
+    std::string req_mode; // get请求是上传还是下载
     std::string method; // 请求方式
     std::string url; // 请求地址
     std::string version; // http请求版本
-    std::string body; // 请求内容
     std::unordered_map<std::string, std::string> headers;
     std::unordered_map<std::string, std::string> post_former; // Post表单信息
 };

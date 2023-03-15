@@ -2,26 +2,23 @@
 
 httpConn::httpConn()
 {
-    once_read_bytes = 1024;
-    event_mode = EPOLLET | EPOLLONESHOT; // 待做：server传递mode作为构造函数参数
-}
 
-void httpConn::init(int fd, sockaddr_in address, std::string root_path)
+}
+void httpConn::init(int fd, sockaddr_in addr, const std::string& res_dir, uint32_t conn_ev)
 {
-    this->address = address;
     sockfd = fd;
-    this->root_path = root_path;
+    address = addr;
+    resource_dir = res_dir;
+    conn_mode = conn_ev;
     bzero(ip, sizeof(ip));
     inet_ntop(AF_INET, &address.sin_addr, ip, sizeof(ip));
     port = ntohs(address.sin_port);
-
-    read_buffer.delAll();
-    write_buffer.delAll();
-}
-
-// 重新初始化信息
-void httpConn::_reset()
-{
+    read_buffer = std::make_unique<buffer>();
+    read_buffer->delAll();
+    write_buffer = std::make_unique<buffer>();
+    write_buffer->delAll();
+    m_request = std::make_unique<http_request>(resource_dir);
+    m_response = std::make_unique<http_response>(resource_dir);
     m_iv_cnt = 0;
 }
 
@@ -32,13 +29,13 @@ httpConn::~httpConn()
 
 void httpConn::closeData()
 {
-    m_response.unmapFile(); // 删除映射的文件
+    m_response->unmapFile(); // 删除映射的文件
     close(sockfd); // 关闭文件描述符
 }
 
 bool httpConn::isKeepAlive()
 {
-    return m_request.isKeepAlive();
+    return m_request->isKeepAlive();
 }
 
 const char* httpConn::getIp()
@@ -53,19 +50,19 @@ const int httpConn::getPort()
 
 const buffer& httpConn::getReadBuf()
 {
-    return read_buffer;
+    return *read_buffer;
 }
 
 const buffer& httpConn::getWriteBuf()
 {
-    return write_buffer;
+    return *write_buffer;
 }
 
 int httpConn::httpRead(int& save_errno)
 {   
     int ret;
     do{
-        ret = read_buffer.readFd(sockfd, save_errno);
+        ret = read_buffer->readFd(sockfd, save_errno);
         if(ret == -1){
             save_errno = errno; 
             break;
@@ -75,7 +72,7 @@ int httpConn::httpRead(int& save_errno)
             // 客户端已断开连接
             break;
         }
-    } while (event_mode & EPOLLET);
+    } while (conn_mode & EPOLLET);
     
     return ret;
 }
@@ -100,16 +97,16 @@ int httpConn::httpWrite(int& save_errno)
             m_iv[1].iov_len -= (len - m_iv[0].iov_len);
             if(m_iv[0].iov_len)
             {   
-                write_buffer.delAll();
+                write_buffer->delAll();
                 m_iv[0].iov_len = 0;
             }
         }
         else{
             m_iv[0].iov_base = (char*)m_iv[0].iov_base + len;
             m_iv[0].iov_len -= len;
-            write_buffer.deln(len);
+            write_buffer->deln(len);
         }
-    }while(event_mode & EPOLLET);
+    }while(conn_mode & EPOLLET);
     
     return len;
 }
@@ -120,37 +117,36 @@ int httpConn::httpWrite(int& save_errno)
 bool httpConn::process()
 {   
     // 重新初始化
-    if(m_request.getState() == FINISH)
+    if(m_request->getState() == FINISH)
     {
-        m_request.init();
+        m_request->init();
     }
-    if(read_buffer.readAbleBytes() <= 0)
+    if(read_buffer->readAbleBytes() <= 0)
     {
         return false;
     }
-    HTTP_CODE code = m_request.parser(read_buffer);
+    HTTP_CODE code = m_request->parser(*read_buffer);
     if(code == NO_REQUEST)
     {
         return false;
     }
     // 读到完整的http请求 read_buf重新初始化 
-    read_buffer.delAll(); 
-    // 根据解析的结果 初始化request
-    m_response.init(code, m_request.isKeepAlive(), m_request.get_url(), root_path);
-    m_response.response(write_buffer);
+    read_buffer->delAll();
+    // 根据解析的结果 初始化request 传入状态码、请求方法、GET请求的mode(delete || download)、 是否长连接、请求文件
+    m_response->init(code, m_request->isKeepAlive(), m_request->getMethod(), m_request->getMode(),  m_request->getUrl());
+    m_response->response(*write_buffer);
     
     // 响应头
-    m_iv[0].iov_base = (char*)write_buffer.peek();
-    m_iv[0].iov_len = write_buffer.readAbleBytes();
+    m_iv[0].iov_base = (char*)write_buffer->peek();
+    m_iv[0].iov_len = write_buffer->readAbleBytes();
     m_iv_cnt = 1;
 
-    if(m_response.getFileAddress() && m_response.getFileBytes() > 0)
+    if(m_response->getFileAddress() && m_response->getFileBytes() > 0)
     {
-        m_iv[1].iov_base = (char*)m_response.getFileAddress();
-        m_iv[1].iov_len = m_response.getFileBytes();
+        m_iv[1].iov_base = (char*)m_response->getFileAddress();
+        m_iv[1].iov_len = m_response->getFileBytes();
         m_iv_cnt += 1;
     }
 
     return true;
 }
-

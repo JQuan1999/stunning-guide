@@ -130,11 +130,13 @@ bool buffer::empty() const
     return read_pos == write_pos;
 }
 
-std::string buffer::dealToString(size_t len)
+std::string buffer::toString(size_t len, bool del)
 {
     assert(len > 0 && len <= readAbleBytes());
     std::string ret(peek(), peek() + len);
-    deln(len);
+    if(del){
+        deln(len);
+    }
     return ret;
 }
 
@@ -142,6 +144,7 @@ std::string buffer::dealToString(size_t len)
 void buffer::hasWrite(size_t len)
 {
     write_pos += len;
+    _buf[write_pos] = '\0';
 }
 
 const char* buffer::peek() const
@@ -235,11 +238,11 @@ std::ostream& operator<<(std::ostream& os, const buffer& buf)
     {
         for(size_t pos = buf.read_pos; pos < buf.write_pos; pos++)
         {
-            std::cout<<buf[pos];
+            os<<buf[pos];
         }
     }else
     {
-        std::cout<<"empty";
+        os<<"empty";
     }
     return os;
 }

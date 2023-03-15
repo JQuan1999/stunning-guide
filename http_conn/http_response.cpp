@@ -1,6 +1,5 @@
 #include "http_response.h"
 
-std::string http_response::file_dir = "files";
 std::string http_response::list_html = "filelist.html";
 std::string http_response::index_html = "index.html";
 
@@ -27,10 +26,34 @@ std::unordered_map<int, std::string> http_response::error_code_path = {
     {404, "html/404.html"},
 };
 
-http_response::http_response()
-{
-    mm_file_address = nullptr;
 
+std::unordered_map<std::string, std::string> http_response::suffix_type = {
+    { ".html",  "text/html" },
+    { ".xml",   "text/xml" },
+    { ".xhtml", "application/xhtml+xml" },
+    { ".txt",   "text/plain" },
+    { ".rtf",   "application/rtf" },
+    { ".pdf",   "application/pdf" },
+    { ".word",  "application/nsword" },
+    { ".png",   "image/png" },
+    { ".gif",   "image/gif" },
+    { ".jpg",   "image/jpeg" },
+    { ".jpeg",  "image/jpeg" },
+    { ".au",    "audio/basic" },
+    { ".mpeg",  "video/mpeg" },
+    { ".mpg",   "video/mpeg" },
+    { ".avi",   "video/x-msvideo" },
+    { ".gz",    "application/x-gzip" },
+    { ".tar",   "application/x-tar" },
+    { ".css",   "text/css "},
+    { ".js",    "text/javascript "},
+};
+
+
+http_response::http_response(const std::string& dir)
+{
+    res_dir = dir;
+    mm_file_address = nullptr;
 }
 
 http_response::~http_response()
@@ -48,43 +71,53 @@ void http_response::unmapFile()
 }
 
 // 待完成：解析相对路径和绝对路径、并判断请求文件是否存在
-void http_response::init(HTTP_CODE http_code, bool keep_alive, std::string url, std::string root)
+void http_response::init(HTTP_CODE http_code, bool keep_alive, const std::string& http_method, const std::string& get_mode, const std::string& url)
 {
-    assert(root.size() > 0);
     assert(httpCode2number.count(http_code));
-    if(url.size() == 0 || (url.size() == 1 && url[0] == '/'))
-    {
-        url = "index.html";
-    }
-
     if(mm_file_address)
     {
         unmapFile();
     }
     file_stat = {0};
-
     code = httpCode2number[http_code]; // 状态码转换
     is_keep_alive = keep_alive;
-    request_file = url;
-    root_path = root;
-
+    method = http_method;
+    mode = get_mode;
     _updateIndexHtml();
 
-    if(stat((root_path + request_file).c_str(), &file_stat) < 0 || S_ISDIR(file_stat.st_mode))
-    {
-        code = 404; // 找不到
+    // 初始化 request url和abs_path
+    if(method == "GET" && mode == "download"){
+        _initDownLoad(url);
+    }else{
+        _initOthers(url);
+    }
+    LOG_DEBUG("请求url: %s, 状态码: %d, 修正之后的请求文件路径为:%s", url.c_str(), code, request_file.c_str());
+}
+
+
+void http_response::_initDownLoad(const std::string& url)
+{
+    assert(url.size() != 0);
+    request_file = res_dir + url;
+    assert(stat(request_file.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
+}
+
+void http_response::_initOthers(const std::string& url)
+{
+    if(url.size() == 0 || (url.size() == 1 && url[0] == '/') || mode == "delete" || method == "POST"){
+        request_file = res_dir + "index.html";
+    }else{
+        request_file = res_dir + url;
     }
 
-    if(error_code_path.count(code))
-    {
-        request_file = error_code_path[code];
+    if(stat(request_file.c_str(), &file_stat) < 0 || S_ISDIR(file_stat.st_mode)){
+        code = 404;
     }
 
-    abs_file_path = root_path + request_file;
-    std::cout<<"request url: "<<url<<", root path: "<<root<< ", code:" <<code<< ", after modify the fact file path: "<<abs_file_path<<"\n";
-
-    assert(stat(abs_file_path.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
-
+    if(error_code_path.count(code)){
+        request_file = res_dir + error_code_path[code];
+    }
+    assert(stat(request_file.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
 }
 
 const char* http_response::getFileAddress()
@@ -101,9 +134,9 @@ size_t http_response::getFileBytes()
 void http_response::_updateIndexHtml()
 {
     
-    std::string index_html, temp_line;
+    std::string index_content, temp_line;
     // 用个配置文件保存信息
-    std::string filelist_path = root_path + list_html;
+    std::string filelist_path = res_dir + list_html;
     assert(access(filelist_path.c_str(), F_OK) == 0); // 文件路径存在
 
     std::ifstream filelist(filelist_path.c_str());
@@ -111,15 +144,15 @@ void http_response::_updateIndexHtml()
     while(1)
     {
         std::getline(filelist, temp_line, '\n');
+        index_content += temp_line + '\n';
         if(temp_line == "<!--插入位置-->")
         {
             break;
         }
-        index_html += temp_line + '\n';
     }
 
     // 获取file_dir文件下的所有文件名
-    std::string dir_name = root_path + file_dir;
+    std::string dir_name = file_dir;
     DIR* dir = opendir(dir_name.c_str());
     assert(dir != nullptr);
 
@@ -133,7 +166,7 @@ void http_response::_updateIndexHtml()
         if(name == "." || name == "..") continue;
 
         // 加入表格内容
-        index_html += "            <tr><td class=\"col1\">" + name +
+        index_content += "            <tr><td class=\"col1\">" + name +
                     "</td> <td class=\"col2\"><a href=\"download/" + name +
                     "\">下载</a></td> <td class=\"col3\"><a href=\"delete/" + name +
                     "\" onclick=\"return confirmDelete();\">删除</a></td></tr>" + "\n";
@@ -141,12 +174,12 @@ void http_response::_updateIndexHtml()
 
     // 加上插入位置之后的内容
     while(std::getline(filelist, temp_line, '\n')){
-        index_html += temp_line + "\n";
+        index_content += temp_line + "\n";
     }
 
-    std::string save_path = root_path + "index.html";
+    std::string save_path = res_dir + index_html;
     std::ofstream save_file(save_path, std::ios_base::out);
-    save_file<<index_html;
+    save_file<<index_content;
 
     filelist.close();
     save_file.close();
@@ -155,7 +188,9 @@ void http_response::_updateIndexHtml()
 
 void http_response::response(buffer& write_buf)
 {
-    _writeStateLine(write_buf); 
+    // 1.GET 1.1 普通GET 1.2 delete GET 1.3 download GET
+    // 2.Post
+    _writeStateLine(write_buf);
     _writeHeader(write_buf); 
     _writeContent(write_buf);
 }
@@ -189,7 +224,18 @@ void http_response::_writeHeader(buffer& write_buf)
     }
     
     // 文件类型(根据request_file文件类型回复content-type)
-    write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
+    if(method == "GET" && mode == "download"){
+        int pos = request_file.find('.');
+        assert(pos != -1);
+        std::string suffix = request_file.substr(pos, request_file.size() - pos);
+        if(suffix_type.count(suffix)){
+            write_buf += "Content-type: " + suffix_type[suffix] + "\r\n";
+        }else{
+            write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
+        }
+    }else{
+        write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
+    }
     write_buf += "Content-Length: " + std::to_string(file_stat.st_size) + "\r\n\r\n";
 }
 

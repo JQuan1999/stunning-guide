@@ -29,7 +29,7 @@ public:
 
     void deln(size_t);
     void delAll();
-    std::string dealToString(size_t);
+    std::string toString(size_t, bool del = true);
 
     const char* peek() const;
     const char* end() const;

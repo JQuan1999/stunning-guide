@@ -21,13 +21,16 @@
 #include "../http_conn/http_conn.h"
 #include "../pool/thread_pool.h"
 #include "../http_conn/http_enum.h"
+#include "../log/log.h"
 #include "m_epoll.h"
 
 class server
 {
 
 public:
-    server(event_type listen_event , event_type connfd_event, int threads = 8, std::string root_path = "/root/linux/webserver/resource/");
+    server(int port, event_type listen_event , event_type connfd_event, int threads = 8, 
+    std::string root_path = "", std::string resource_dir = "", std::string log_dir = "", 
+    bool open_log = true, int log_level = 0, int split_lines = 50000, int log_cap = 1024);
     ~server();
 
     void initSocket();
@@ -48,14 +51,17 @@ private:
     void _onProcess(int fd); 
 
 private:
+    bool stop;
+    int m_port; // 监听的端口
     int listen_fd; // 监听的文件描述符
     int epoll_fd; // epoll监听文件描述符
     int pipefd[2]; // 接受信号处理的管道
     std::string root_path;
+    std::string resource_dir;
+    std::string log_dir;
     event_type listen_mode;
     event_type conn_mode;
     std::unordered_map<int, httpConn> users; // 保存文件描述符到客户连接请求的哈希表users
-    // 智能指针实现
     std::unique_ptr<m_epoll> m_epoll_ptr;
     std::unique_ptr<thread_pool> t_pool;
     std::function<void(void)> task; // 由线程池进行处理的任务

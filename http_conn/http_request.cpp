@@ -1,7 +1,8 @@
 #include "http_request.h"
 
-http_request::http_request()
+http_request::http_request(const std::string& dir)
 {
+    res_dir = dir;
     init();
 }
 
@@ -14,7 +15,7 @@ http_request::~http_request()
 void http_request::init()
 {
     check_state = REQUEST_LINE;
-    mode = method = url = version = body = "";
+    req_mode = method = url = version = "";
     headers.clear();
     post_former.clear();
 }
@@ -35,23 +36,35 @@ bool http_request::isKeepAlive()
 
 HTTP_CODE http_request::parser(buffer& buf)
 {
-    std::string partition = "\r\n";
+    std::string partition = "\r\n", line;
+    int pos;
     while(!buf.empty())
     {
-        int pos = buf.find(partition);
         // 请求不完整
-        if(pos == -1)
+        if((pos = buf.find(partition)) == -1)
         {
+            LOG_DEBUG("请求不完整找不到回车符, buf的内容为: %s", buf.peek());
             break;
         }
-        std::string line = buf.dealToString(pos - buf.getReadPos() + 2);
-        line.erase(line.end() - 2, line.end()); // 删除\r\n
-        // 空行 头部已解析完毕
-        if(line.size() == 0 && check_state == HEADER)
-        {
-            check_state = CONTENT;
-            continue;
+
+        // 检查状态行和头部按行解析
+        if(check_state == REQUEST_LINE || check_state == HEADER){
+            line = buf.toString(pos - buf.getReadPos() + 2, true);
+            line.erase(line.end() - 2, line.end()); // 删除\r\n
+            // 连续两次上传POST没有请求头第一行就是分隔符
+            if(check_state == REQUEST_LINE && line.substr(0, 2) == "--"){
+                check_state = CONTENT;
+                method = "POST";
+                continue;
+            }
+            // 遇到空行 头部已解析完毕
+            if(line.size() == 0 && check_state == HEADER)
+            {
+                check_state = CONTENT;
+                continue;
+            }
         }
+        
         switch (check_state)
         {
 
@@ -78,7 +91,7 @@ HTTP_CODE http_request::parser(buffer& buf)
             // 判断是否有content
             if(buf.readAbleBytes() <= 2)
             {
-                std::cout<<"no content \n";
+                LOG_DEBUG("HTTP请求没有请求内容");
                 buf.delAll(); // 删除\r\n
                 check_state = FINISH;
                 return GET_REQUEST;
@@ -86,13 +99,12 @@ HTTP_CODE http_request::parser(buffer& buf)
             break;
         
         case CONTENT:
-            if(!parseContent(line))
+            if(!parseContent(buf))
             {
-                // 调试信息
-                std::cout <<"parseRequestLine error, buf data: " << buf<<std::endl;
                 check_state = FINISH;
                 return BAD_REQUEST;
             }
+            check_state = FINISH;
             return GET_REQUEST;
 
         default:
@@ -100,6 +112,23 @@ HTTP_CODE http_request::parser(buffer& buf)
         }
     }
     return NO_REQUEST;
+}
+
+void http_request::_remove(const std::string& url)
+{
+    struct stat st;
+    std::string file_path = res_dir + url;
+    // 文件路径存在且不是目录
+    if(stat(file_path.c_str(), &st) == 0 && !S_ISDIR(st.st_mode)){
+        int ret = remove(file_path.c_str());
+        if(ret == 0){
+            LOG_INFO("客户端请求删除文件: %s, 文件删除成功!", url.c_str());
+        }else{
+            LOG_INFO("客户端请求删除文件: %s, 文件删除失败!", url.c_str());
+        }
+    }else{
+        LOG_INFO("文件路径 : %s, 存在问题", url.c_str());
+    }
 }
 
 bool http_request::parseRequestLine(const std::string& request)
@@ -118,17 +147,38 @@ bool http_request::parseRequestLine(const std::string& request)
             ret = false;
         }
     }
-    if(ret)
+    if(ret && method == "GET")
     {
-        std::cout<<"method: "<<method <<", url: "<<url <<", version: "<<version<<"\n";
-        // 判断是否进行了删除或下载 找到第一个/作为分隔符
+        // url是否为 /delete/file 或者 /download/file
+        int pos, begin = 0;
         std::string tmp = url;
-        
+        if(tmp.size() != 0){
+            if(tmp[0] == '/'){
+                begin = 1;
+            }
+            pos = tmp.find('/', begin);
+            if(pos != -1){
+                req_mode = tmp.substr(begin, pos - begin);
+            }
+        }
+
+        // 是delete或者download  需要截取真正的url
+        if(req_mode.size() != 0 && (req_mode == "delete" || req_mode == "download")){
+            int len = req_mode.size() + begin;
+            url.erase(0, len); // 删除mode
+            if(req_mode == "delete"){
+                _remove(url);
+            }
+        }
+        LOG_DEBUG("method: %s, url: %s, version: %s", method, url, version);
+        if(req_mode.size() != 0){
+            LOG_DEBUG("request mode: %s", req_mode);
+        }
     }
-    else
+    else if(!ret)
     {
         // 解析出错
-        std::cout<<"parser error, request line: "<<request<<std::endl;
+        LOG_ERROR("解析出错, 请求行为: %s", request.c_str());
     }
     return ret;
 }
@@ -141,7 +191,25 @@ bool http_request::parseRequestHead(const std::string& line)
     std::smatch sub_match;
     if(std::regex_match(line, sub_match, pattern))
     {
-        headers[sub_match[1]] = sub_match[2];
+        // Content-Type: multipart/form-data; boundary=----分隔符 需要特殊处理
+        if(sub_match[1] == "Content-Type"){
+            std::string value = sub_match[2];
+            int pos;
+            if( (pos = value.find(';')) != -1 ){
+                int begin = 0;
+                while(value[begin] == ' ') begin++; // 去除空格
+                std::string content_type = value.substr(begin, pos - begin);
+                value.erase(0, pos + 1);
+                headers[sub_match[1]] = content_type;
+
+                // 保存分隔符
+                if((pos = value.find('=')) != -1 ){
+                    headers[value.substr(0, pos)] = value.erase(0, pos + 1);
+                }
+            }
+        }else{
+            headers[sub_match[1]] = sub_match[2];
+        }
         // 调试信息
         // std::cout<<"key: "<<sub_match[1]<<" value: "<<sub_match[2]<<std::endl;
         return true;
@@ -152,33 +220,106 @@ bool http_request::parseRequestHead(const std::string& line)
 }
 
 
-bool http_request::parseContent(const std::string& line)
+bool http_request::parseContent(buffer& buf)
 {
-    body = line;
-    // 待做解析post请求
-    // 调试信息
-    // std::cout<<"request body: "<<body<<std::endl;
+    // 解析是post还是get
+    // post需要解析表单字段, 将post的内容写入文件中
+    std::string partition = "\r\n", line;
+    int pos = -1;
+    size_t sep_len = 0; // 分割字符串长度
+    size_t file_len = 0; // 发送的文件长度
+    if(method == "GET")
+    {
+        return true;
+    }
+    // 只支持解析上传文件的post请求multipart/form-data
+    if(headers.count("Content-Type") && headers["Content-Type"] == "multipart/form-data"){
+        LOG_DEBUG("解析到POST请求, 进行请求内容的解析");
+        while(!buf.empty())
+        {
+            if((pos = buf.find(partition)) == -1){
+                LOG_DEBUG("未找到分隔符退出循环")
+                break;
+            }
+            line = buf.toString(pos - buf.getReadPos() + 2, true);
+            line.erase(line.end() - 2, line.end());
+            // 读到空行 进行文件内容的读取
+            if(line.size() == 0){
+                break;
+            }
+            // 读取到分隔符
+            else if(line.substr(0, 2) == "--"){
+                sep_len = line.size() + 2;
+                continue;
+            }
+            // 解析表单字段
+            else
+            {
+                // 找到文件名
+                // Content-Disposition: form-data; name="upload"; filename="xxx"
+                if((pos = line.find("filename")) == -1){
+                    continue;
+                }
+                // 找到"xxx"的起始位置
+                int begin = line.find('"', pos);
+                if(begin == -1){
+                    break;
+                }
+                int end = line.find('"', begin + 1);
+                if(end == -1)
+                {
+                    break;
+                }
+                std::string filename = line.substr(begin + 1, end - begin - 1);
+                LOG_DEBUG("解析到 POST请求上传的文件名: %s", filename.c_str());
+                post_former["filename"] = filename;
+            }
+        }
+
+        // 写入文件
+        if(post_former.count("filename") && post_former["filename"].size() != 0){
+            file_len = buf.readAbleBytes() - sep_len - 2; // 实际要写的长度 = 待写的字符长度 - (分隔符长度 + 2)
+            std::string file_path = res_dir + post_former["filename"];
+            
+            if(file_len == 0){
+                LOG_DEBUG("文件长度 = 0不进行保存, 文件名: %s", post_former["filename"].c_str());
+                return true;
+            }
+
+            LOG_DEBUG("上传的文件路径：%s, 文件长度为: %d", file_path.c_str(), file_len);
+            std::ofstream f(file_path, std::ios::out);
+
+            // std::string to_write(buf.peek(), buf.peek() + file_len);
+            // std::cout<<"待写入的字符 = "<<to_write<<std::endl;
+
+            f.write(buf.peek(), file_len);
+            buf.delAll(); // buf清空
+            f.close(); // 文件写入
+            struct stat st;
+            assert(stat(file_path.c_str(), &st) == 0);
+        }
+    }
     return true;
 }
 
 
-const std::string http_request::get_method()
+const std::string http_request::getMethod()
 {
     return method;
 }
 
-const std::string http_request::get_url()
+const std::string http_request::getUrl()
 {
     return url;
 }
 
-const std::string http_request::get_version()
+const std::string http_request::getVersion()
 {
     return version;
 }
 
 
-const std::string http_request::get_head(const std::string head)
+const std::string http_request::getHead(const std::string head)
 {
     if(headers.count(head))
     {
@@ -187,7 +328,7 @@ const std::string http_request::get_head(const std::string head)
     return "";
 }
 
-const std::string http_request::get_body()
+const std::string http_request::getMode()
 {
-    return body;
+    return req_mode;
 }
