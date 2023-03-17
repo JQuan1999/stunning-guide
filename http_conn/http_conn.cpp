@@ -4,11 +4,10 @@ httpConn::httpConn()
 {
 
 }
-void httpConn::init(int fd, sockaddr_in addr, const std::string& res_dir, uint32_t conn_ev)
+void httpConn::init(int fd, sockaddr_in addr, const std::string& r_dir, const std::string& h_dir, uint32_t conn_ev)
 {
     sockfd = fd;
     address = addr;
-    resource_dir = res_dir;
     conn_mode = conn_ev;
     bzero(ip, sizeof(ip));
     inet_ntop(AF_INET, &address.sin_addr, ip, sizeof(ip));
@@ -17,8 +16,8 @@ void httpConn::init(int fd, sockaddr_in addr, const std::string& res_dir, uint32
     read_buffer->delAll();
     write_buffer = std::make_unique<buffer>();
     write_buffer->delAll();
-    m_request = std::make_unique<http_request>(resource_dir);
-    m_response = std::make_unique<http_response>(resource_dir);
+    m_request = std::make_unique<http_request>(r_dir, fd);
+    m_response = std::make_unique<http_response>(r_dir, h_dir, fd);
     m_iv_cnt = 0;
 }
 

@@ -84,7 +84,7 @@ bool Log::init(int level, const char* path, const char* suffix, int split_lines,
         m_is_async = false;
     }
 
-    is_closed = 0;
+    is_closed = 0; // 开启
     m_split_lines = split_lines;
     m_count = 0; // 行计数
 
@@ -125,7 +125,7 @@ void Log::async_write_log()
     while(m_bq->pop(single_log) && !is_closed)
     {
         std::lock_guard<std::mutex> lk(m_mutex);
-        cout<<"single_log = "<<single_log<<endl;
+        // cout<<"single_log = "<<single_log<<endl;
         fout<<single_log;
     }
 }

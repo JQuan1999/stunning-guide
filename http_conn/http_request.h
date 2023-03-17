@@ -21,7 +21,7 @@ class http_request
 {
 public:
 
-    http_request(const std::string&);
+    http_request(const std::string&, const int&);
     ~http_request();
     void init();
     HTTP_CODE parser(buffer& buf);
@@ -43,7 +43,7 @@ private:
 
     CHECK_STATE check_state;
     HTTP_CODE http_code;
-
+    int fd;
     std::string res_dir; 
     std::string req_mode; // get请求是上传还是下载
     std::string method; // 请求方式

@@ -10,8 +10,6 @@
 #include<atomic>
 #include<thread>
 
-using std::cout;
-using std::endl;
 
 template<typename T>
 class block_queue
@@ -79,12 +77,12 @@ public:
         }
         bool is_full = full();
         ret = m_queue.front();
-        cout<<"thread id: "<<std::this_thread::get_id()<<" has consumer a log\n";
+        // cout<<"thread id: "<<std::this_thread::get_id()<<" has consumer a log\n";
         m_queue.pop();
         lock.unlock();
 
         if(is_full){
-            cout<<"thread id: "<<std::this_thread::get_id()<<" notify one product thread\n";
+            // cout<<"thread id: "<<std::this_thread::get_id()<<" notify one product thread\n";
             cv_full.notify_one();
         }
         return true;
@@ -98,12 +96,12 @@ private:
         if(_stopped){
             return; // 如果主线程已停止直接返回
         }
-        cout<<"thread id: "<<std::this_thread::get_id()<<" has product a log\n";
+        // cout<<"thread id: "<<std::this_thread::get_id()<<" has product a log\n";
         bool is_empty = empty();
         m_queue.push(std::forward<T>(value));
         lock.unlock();
         if(is_empty){
-            cout<<"thread id: "<<std::this_thread::get_id()<<" notify one consumer thread\n";
+            // cout<<"thread id: "<<std::this_thread::get_id()<<" notify one consumer thread\n";
             cv_empty.notify_one(); // 如果插入元素前为空唤醒写入日志线程
         }
     }

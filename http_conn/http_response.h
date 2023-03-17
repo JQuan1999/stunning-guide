@@ -20,7 +20,7 @@
 class http_response
 {
 public:
-    http_response(const std::string&);
+    http_response(const std::string&, const std::string&, const int&);
     ~http_response();
     void unmapFile();
     void init(HTTP_CODE, bool, const std::string& , const std::string&, const std::string&);
@@ -38,16 +38,17 @@ private:
     void _writeContent(buffer&);
 
 private:
+    int fd;
     bool is_keep_alive;
-    std::string res_dir; // 根目录文件路径
+    std::string res_dir; 
+    std::string htmls_dir; 
     std::string request_file; // 请求文件
     std::string method;
     std::string mode;
     int code; 
-
+    
     static std::string index_html;
     static std::string list_html;
-    static std::string file_dir;
     static std::unordered_map<int, std::string> code_status;
     static std::unordered_map<int, std::string> error_code_path;
     static std::unordered_map<HTTP_CODE, int> httpCode2number;

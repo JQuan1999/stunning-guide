@@ -1,7 +1,7 @@
 #include "http_response.h"
 
-std::string http_response::list_html = "filelist.html";
-std::string http_response::index_html = "index.html";
+std::string http_response::list_html = "/filelist.html";
+std::string http_response::index_html = "/index.html";
 
 // http状态码 转化为数字
 std::unordered_map<HTTP_CODE, int> http_response::httpCode2number = {
@@ -21,9 +21,9 @@ std::unordered_map<int, std::string> http_response::code_status = {
 
 // 错误状态码对应的html文件
 std::unordered_map<int, std::string> http_response::error_code_path = {
-    {400, "html/400.html"},
-    {403, "html/403.html"},
-    {404, "html/404.html"},
+    {400, "/400.html"},
+    {403, "/403.html"},
+    {404, "/404.html"},
 };
 
 
@@ -50,9 +50,11 @@ std::unordered_map<std::string, std::string> http_response::suffix_type = {
 };
 
 
-http_response::http_response(const std::string& dir)
+http_response::http_response(const std::string& r_dir, const std::string& h_dir, const int& connfd)
 {
-    res_dir = dir;
+    fd = connfd;
+    res_dir = r_dir;
+    htmls_dir = h_dir;
     mm_file_address = nullptr;
 }
 
@@ -91,7 +93,7 @@ void http_response::init(HTTP_CODE http_code, bool keep_alive, const std::string
     }else{
         _initOthers(url);
     }
-    LOG_DEBUG("请求url: %s, 状态码: %d, 修正之后的请求文件路径为:%s", url.c_str(), code, request_file.c_str());
+    LOG_DEBUG("fd: %d, 请求url: %s, 状态码: %d, 修正之后的请求文件路径为:%s", fd, url.c_str(), code, request_file.c_str());
 }
 
 
@@ -104,8 +106,9 @@ void http_response::_initDownLoad(const std::string& url)
 
 void http_response::_initOthers(const std::string& url)
 {
-    if(url.size() == 0 || (url.size() == 1 && url[0] == '/') || mode == "delete" || method == "POST"){
-        request_file = res_dir + "index.html";
+    if(url.size() == 0 || (url.size() == 1 && url[0] == '/') || (url == "/index.html" || url == "index.html") || mode == "delete" || method == "POST")
+    {
+        request_file = htmls_dir + "/index.html";
     }else{
         request_file = res_dir + url;
     }
@@ -115,7 +118,7 @@ void http_response::_initOthers(const std::string& url)
     }
 
     if(error_code_path.count(code)){
-        request_file = res_dir + error_code_path[code];
+        request_file = htmls_dir + error_code_path[code];
     }
     assert(stat(request_file.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
 }
@@ -135,8 +138,7 @@ void http_response::_updateIndexHtml()
 {
     
     std::string index_content, temp_line;
-    // 用个配置文件保存信息
-    std::string filelist_path = res_dir + list_html;
+    std::string filelist_path = htmls_dir + list_html;
     assert(access(filelist_path.c_str(), F_OK) == 0); // 文件路径存在
 
     std::ifstream filelist(filelist_path.c_str());
@@ -151,9 +153,8 @@ void http_response::_updateIndexHtml()
         }
     }
 
-    // 获取file_dir文件下的所有文件名
-    std::string dir_name = file_dir;
-    DIR* dir = opendir(dir_name.c_str());
+    // 获取files文件下的所有文件名
+    DIR* dir = opendir(res_dir.c_str());
     assert(dir != nullptr);
 
     struct dirent* stdinfo;
@@ -167,8 +168,8 @@ void http_response::_updateIndexHtml()
 
         // 加入表格内容
         index_content += "            <tr><td class=\"col1\">" + name +
-                    "</td> <td class=\"col2\"><a href=\"download/" + name +
-                    "\">下载</a></td> <td class=\"col3\"><a href=\"delete/" + name +
+                    "</td> <td class=\"col2\"><a href=\"/download/" + name +
+                    "\">下载</a></td> <td class=\"col3\"><a href=\"/delete/" + name +
                     "\" onclick=\"return confirmDelete();\">删除</a></td></tr>" + "\n";
     }
 
@@ -177,7 +178,7 @@ void http_response::_updateIndexHtml()
         index_content += temp_line + "\n";
     }
 
-    std::string save_path = res_dir + index_html;
+    std::string save_path = htmls_dir + index_html;
     std::ofstream save_file(save_path, std::ios_base::out);
     save_file<<index_content;
 
@@ -242,7 +243,7 @@ void http_response::_writeHeader(buffer& write_buf)
 // 写入传输内容
 void http_response::_writeContent(buffer& write_buf)
 {
-    int src_fd = open(abs_file_path.c_str(), O_RDONLY);
+    int src_fd = open(request_file.c_str(), O_RDONLY);
     assert(src_fd > 0);
     // 将文件映射到内存
     // 输出日志

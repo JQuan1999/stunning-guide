@@ -1,8 +1,9 @@
 #include "http_request.h"
 
-http_request::http_request(const std::string& dir)
+http_request::http_request(const std::string& r_dir, const int& connfd)
 {
-    res_dir = dir;
+    res_dir = r_dir;
+    fd = connfd;
     init();
 }
 
@@ -38,12 +39,13 @@ HTTP_CODE http_request::parser(buffer& buf)
 {
     std::string partition = "\r\n", line;
     int pos;
+    // std::cout<<"buf = "<<buf<<std::endl;
     while(!buf.empty())
     {
         // 请求不完整
         if((pos = buf.find(partition)) == -1)
         {
-            LOG_DEBUG("请求不完整找不到回车符, buf的内容为: %s", buf.peek());
+            LOG_DEBUG("fd: %d, 请求不完整找不到回车符, buf的内容为: %s", fd, buf.peek());
             break;
         }
 
@@ -91,7 +93,7 @@ HTTP_CODE http_request::parser(buffer& buf)
             // 判断是否有content
             if(buf.readAbleBytes() <= 2)
             {
-                LOG_DEBUG("HTTP请求没有请求内容");
+                LOG_DEBUG("fd : %d, HTTP请求没有请求内容", fd);
                 buf.delAll(); // 删除\r\n
                 check_state = FINISH;
                 return GET_REQUEST;
@@ -122,12 +124,12 @@ void http_request::_remove(const std::string& url)
     if(stat(file_path.c_str(), &st) == 0 && !S_ISDIR(st.st_mode)){
         int ret = remove(file_path.c_str());
         if(ret == 0){
-            LOG_INFO("客户端请求删除文件: %s, 文件删除成功!", url.c_str());
+            LOG_INFO("fd: %d, 客户端请求删除文件: %s, 文件删除成功!", fd, url.c_str());
         }else{
-            LOG_INFO("客户端请求删除文件: %s, 文件删除失败!", url.c_str());
+            LOG_INFO("fd: %d, 客户端请求删除文件: %s, 文件删除失败!", fd, url.c_str());
         }
     }else{
-        LOG_INFO("文件路径 : %s, 存在问题", url.c_str());
+        LOG_INFO("fd: %d, 文件路径 : %s存在问题删除失败",fd, url.c_str());
     }
 }
 
@@ -170,15 +172,15 @@ bool http_request::parseRequestLine(const std::string& request)
                 _remove(url);
             }
         }
-        LOG_DEBUG("method: %s, url: %s, version: %s", method, url, version);
+        LOG_DEBUG("fd: %d, method: %s, url: %s, version: %s", fd, method.c_str(), url.c_str(), version.c_str());
         if(req_mode.size() != 0){
-            LOG_DEBUG("request mode: %s", req_mode);
+            LOG_DEBUG("fd: %d, request mode: %s", fd, req_mode.c_str());
         }
     }
     else if(!ret)
     {
         // 解析出错
-        LOG_ERROR("解析出错, 请求行为: %s", request.c_str());
+        LOG_ERROR("fd: %d, 解析出错请求行为: %s", fd, request.c_str());
     }
     return ret;
 }
@@ -234,11 +236,11 @@ bool http_request::parseContent(buffer& buf)
     }
     // 只支持解析上传文件的post请求multipart/form-data
     if(headers.count("Content-Type") && headers["Content-Type"] == "multipart/form-data"){
-        LOG_DEBUG("解析到POST请求, 进行请求内容的解析");
+        LOG_DEBUG("fd: %d, 解析到POST请求, 进行请求内容的解析", fd);
         while(!buf.empty())
         {
             if((pos = buf.find(partition)) == -1){
-                LOG_DEBUG("未找到分隔符退出循环")
+                LOG_DEBUG("fd: %d, 未找到分隔符退出循环", fd);
                 break;
             }
             line = buf.toString(pos - buf.getReadPos() + 2, true);
@@ -271,7 +273,7 @@ bool http_request::parseContent(buffer& buf)
                     break;
                 }
                 std::string filename = line.substr(begin + 1, end - begin - 1);
-                LOG_DEBUG("解析到 POST请求上传的文件名: %s", filename.c_str());
+                LOG_DEBUG("fd: %d, 解析到 POST请求上传的文件名: %s", fd, filename.c_str());
                 post_former["filename"] = filename;
             }
         }
@@ -279,22 +281,22 @@ bool http_request::parseContent(buffer& buf)
         // 写入文件
         if(post_former.count("filename") && post_former["filename"].size() != 0){
             file_len = buf.readAbleBytes() - sep_len - 2; // 实际要写的长度 = 待写的字符长度 - (分隔符长度 + 2)
+            // 上传的文件路径
             std::string file_path = res_dir + post_former["filename"];
             
             if(file_len == 0){
-                LOG_DEBUG("文件长度 = 0不进行保存, 文件名: %s", post_former["filename"].c_str());
+                LOG_DEBUG("fd: %d, 文件长度 = 0不进行保存, 文件名: %s", post_former["filename"].c_str());
                 return true;
             }
 
-            LOG_DEBUG("上传的文件路径：%s, 文件长度为: %d", file_path.c_str(), file_len);
             std::ofstream f(file_path, std::ios::out);
-
             // std::string to_write(buf.peek(), buf.peek() + file_len);
             // std::cout<<"待写入的字符 = "<<to_write<<std::endl;
 
             f.write(buf.peek(), file_len);
             buf.delAll(); // buf清空
             f.close(); // 文件写入
+            LOG_DEBUG("fd: %d, 文件：%s上传成功! 文件长度为: %d", fd, file_path.c_str(), file_len);
             struct stat st;
             assert(stat(file_path.c_str(), &st) == 0);
         }

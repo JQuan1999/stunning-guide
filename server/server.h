@@ -15,6 +15,7 @@
 #include <unistd.h>
 #include <iostream>
 #include <memory>
+#include <signal.h>
 #include <unordered_map>
 #include <functional>
 
@@ -29,18 +30,19 @@ class server
 
 public:
     server(int port, event_type listen_event , event_type connfd_event, int threads = 8, 
-    std::string root_path = "", std::string resource_dir = "", std::string log_dir = "", 
-    bool open_log = true, int log_level = 0, int split_lines = 50000, int log_cap = 1024);
+    std::string root_path = "", std::string res_dir = "/files/", 
+    std::string lg_dir = "/Logs/", std::string htmls_dir = "/htmls/", bool open_log = true, 
+    int log_level = 0, int split_lines = 50000, int log_cap = 1024);
     ~server();
-
-    void initSocket();
     void run();
-    void _acceptClientResquest(); // 接受客户连接
-
+    static void sigHandler(int sig);
     httpConn& getHttpConn(int); // 取出users信息
 
 private:
-    void _initEventMode(); // 初始化listen_fd和connfd事件触发模式
+    void _stop();
+    void _acceptClientResquest(); // 接受客户连接
+    void _initSocket();
+    void _addSig(int sig); // 设置信号函数
     int _setNoBlocking(int fd); // 设置非阻塞
     void _addClient(int fd, sockaddr_in client_address); // 添加文件描述符
     void _removeClient(int fd); // 移除文件描述符
@@ -55,10 +57,11 @@ private:
     int m_port; // 监听的端口
     int listen_fd; // 监听的文件描述符
     int epoll_fd; // epoll监听文件描述符
-    int pipefd[2]; // 接受信号处理的管道
+    static int pipefd[2]; // 接受信号处理的管道
     std::string root_path;
     std::string resource_dir;
     std::string log_dir;
+    std::string htmls_dir;
     event_type listen_mode;
     event_type conn_mode;
     std::unordered_map<int, httpConn> users; // 保存文件描述符到客户连接请求的哈希表users

@@ -28,7 +28,7 @@ size_t buffer::writeAbleBytes() const
 
 int buffer::find(char target)
 {   
-    for(int i = read_pos; i < write_pos; i++)
+    for(size_t i = read_pos; i < write_pos; i++)
     {
         if(_buf[i] == target)
         {
@@ -47,7 +47,7 @@ int buffer::find(std::string target)
         return -1;
     }
 
-    for(int i = read_pos; i <= write_pos - len; i++)
+    for(size_t i = read_pos; i <= write_pos - len; i++)
     {
         if(strncmp(beginPtr() + i, &target[0], len) == 0)
         {
