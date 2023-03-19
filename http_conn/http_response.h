@@ -23,7 +23,7 @@ public:
     http_response(const std::string&, const std::string&, const int&);
     ~http_response();
     void unmapFile();
-    void init(HTTP_CODE, bool, const std::string& , const std::string&, const std::string&);
+    void init(HTTP_CODE, POST_CODE, bool, const std::string& , const std::string&, const std::string&);
     void response(buffer&);
 
     size_t getFileBytes();
@@ -32,7 +32,9 @@ public:
 private:
     void _remove(const std::string&);
     void _initDownLoad(const std::string&);
-    void _initOthers(const std::string&);
+    void _initNormal(const std::string&);
+    void _initDelete(const std::string&);
+    void _initPost(POST_CODE);
     void _updateIndexHtml();
     void _writeStateLine(buffer&);
     void _writeHeader(buffer&);
@@ -46,7 +48,7 @@ private:
     std::string request_file; // 请求文件
     std::string method;
     std::string mode;
-    int code; 
+    int code;
     
     static std::string index_html;
     static std::string list_html;

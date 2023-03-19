@@ -73,34 +73,61 @@ void http_response::unmapFile()
 }
 
 // 待完成：解析相对路径和绝对路径、并判断请求文件是否存在
-void http_response::init(HTTP_CODE http_code, bool keep_alive, const std::string& http_method, const std::string& get_mode, const std::string& url)
+void http_response::init(HTTP_CODE h_code, POST_CODE p_code, bool keep_alive, const std::string& http_method, const std::string& get_mode, const std::string& url)
 {
-    assert(httpCode2number.count(http_code));
+    assert(httpCode2number.count(h_code));
     if(mm_file_address)
     {
         unmapFile();
     }
     file_stat = {0};
-    code = httpCode2number[http_code]; // 状态码转换
+    code = httpCode2number[h_code]; // 状态码转换
     is_keep_alive = keep_alive;
     method = http_method;
     mode = get_mode;
     _updateIndexHtml();
     
-    if(mode == "delete"){
-        _remove(url);
-    }
-    // 初始化 request url和abs_path
-    if(method == "GET" && mode == "download"){
-        _initDownLoad(url);
+    if(method == "GET"){
+        if(mode.size() == 0){
+            _initNormal(url);
+        }else if(mode == "download"){
+            _initDownLoad(url);
+        }else if(mode == "delete"){
+            _initDelete(url);
+        }
     }else{
-        _initOthers(url);
+        _initPost(p_code);
     }
     LOG_DEBUG("fd: %d, request url: %s, httpcode: %d, the returned file path:%s", fd, url.c_str(), code, request_file.c_str());
+    assert(stat(request_file.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
+}
+
+void http_response::_initNormal(const std::string& url)
+{
+    if(url.size() == 0 || (url.size() == 1 && url[0] == '/') || (url == "/index.html" || url == "index.html")){
+        request_file = htmls_dir + index_html;
+    }else{
+        request_file = res_dir + url;
+        if(access(request_file.c_str(), F_OK) < 0){
+            code = 404;
+            request_file = htmls_dir + error_code_path[code];
+        }
+    }
+}
+
+void http_response::_initDownLoad(const std::string& url)
+{
+    assert(url.size() != 0);
+    request_file = res_dir + url;
+    if(stat(request_file.c_str(), &file_stat) < 0){
+        LOG_DEBUG("fd: %d, the download file path %s is not existed", fd, request_file.c_str());
+        code = 404;
+        request_file = htmls_dir + error_code_path[code];
+    }
 }
 
 
-void http_response::_remove(const std::string& url)
+void http_response::_initDelete(const std::string& url)
 {
     struct stat st;
     std::string file_path = res_dir + url;
@@ -109,40 +136,32 @@ void http_response::_remove(const std::string& url)
         int ret = remove(file_path.c_str());
         if(ret == 0){
             LOG_INFO("fd: %d, the client request delete the file: %s, delete sucessfully!", fd, url.c_str());
+            request_file = htmls_dir + "/delete_sucess.html";
         }else{
             LOG_INFO("fd: %d, the client request delete the file: %s, delete failed!", fd, url.c_str());
+            request_file = htmls_dir + "/delete_failed.html";
         }
     }else{
         LOG_INFO("fd: %d, the filepath of the delete file: %s has problem, delete failed!", fd, url.c_str());
+        request_file = htmls_dir + "/delete_failed.html";
     }
 }
 
 
-void http_response::_initDownLoad(const std::string& url)
+void http_response::_initPost(POST_CODE p_code)
 {
-    assert(url.size() != 0);
-    request_file = res_dir + url;
-    assert(stat(request_file.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
-}
-
-void http_response::_initOthers(const std::string& url)
-{
-    if(url.size() == 0 || (url.size() == 1 && url[0] == '/') || (url == "/index.html" || url == "index.html") || mode == "delete" || method == "POST")
-    {
-        request_file = htmls_dir + "/index.html";
+    if(p_code == POST_GET_CONTENT){
+        request_file = htmls_dir + "/post_sucess.html";
+    }else if(p_code == POST_FAILED){
+        request_file = htmls_dir + "/post_failed.html";
+    }else if(p_code == POST_FILE_EXISTED){
+        request_file = htmls_dir + "/post_existed.html";
     }else{
-        request_file = res_dir + url;
-    }
-
-    if(stat(request_file.c_str(), &file_stat) < 0 || S_ISDIR(file_stat.st_mode)){
-        code = 404;
-    }
-
-    if(error_code_path.count(code)){
+        code = 403;
         request_file = htmls_dir + error_code_path[code];
     }
-    assert(stat(request_file.c_str(), &file_stat) == 0 ); // 初始话后的文件一定是可以找到且能访问的
 }
+
 
 const char* http_response::getFileAddress()
 {
@@ -245,17 +264,13 @@ void http_response::_writeHeader(buffer& write_buf)
     }
     
     // 文件类型(根据request_file文件类型回复content-type)
-    if(method == "GET" && mode == "download"){
-        int pos = request_file.find('.');
-        std::string suffix;
-        if(pos != -1){
-            suffix = request_file.substr(pos, request_file.size() - pos);
-        }
-        if(suffix_type.count(suffix)){
-            write_buf += "Content-type: " + suffix_type[suffix] + "\r\n";
-        }else{
-            write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
-        }
+    int pos = request_file.find('.');
+    std::string suffix;
+    if(pos != -1){
+        suffix = request_file.substr(pos, request_file.size() - pos);
+    }
+    if(suffix_type.count(suffix)){
+        write_buf += "Content-type: " + suffix_type[suffix] + "; chartset=UTF-8\r\n";
     }else{
         write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
     }

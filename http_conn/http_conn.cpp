@@ -78,7 +78,7 @@ bool httpConn::httpRead()
         // 客户端已断开连接
         else if(ret == 0) 
         {
-            return false;;
+            return false;
         }
         parse_code = m_request->parser(*read_buffer);
         read_buffer->delAll();
@@ -96,8 +96,9 @@ bool httpConn::httpRead()
 
 bool httpConn::httpWrite()
 {
+    post_code = m_request->getPCode();
     // 根据解析的结果 初始化request 传入状态码、请求方法、GET请求的mode(delete || download)、 是否长连接、请求文件
-    m_response->init(parse_code, m_request->isKeepAlive(), m_request->getMethod(), m_request->getMode(),  m_request->getUrl());
+    m_response->init(parse_code, post_code, m_request->isKeepAlive(), m_request->getMethod(), m_request->getMode(),  m_request->getUrl());
     m_response->response(*write_buffer);
     // 响应头
     m_iv[0].iov_base = (char*)write_buffer->peek();

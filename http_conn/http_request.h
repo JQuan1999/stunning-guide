@@ -26,6 +26,7 @@ public:
     void init();
     HTTP_CODE parser(buffer& buf);
     CHECK_STATE getState();
+    POST_CODE getPCode();
     bool isKeepAlive();
 
     const std::string getMethod();
@@ -38,11 +39,12 @@ private:
     
     bool parseRequestLine(buffer&);
     bool parseRequestHead(buffer&);
-    bool parseContent(buffer&);
+    POST_CODE parseContent(buffer&);
 
     CHECK_STATE check_state;
     CHECK_POST_CONTENT check_post_state;
     HTTP_CODE http_code;
+    POST_CODE post_code;
     int fd;
     bool first_write;
 

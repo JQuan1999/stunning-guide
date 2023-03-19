@@ -27,6 +27,11 @@ CHECK_STATE http_request::getState()
     return check_state;
 }
 
+POST_CODE http_request::getPCode()
+{
+    return post_code;
+}
+
 bool http_request::isKeepAlive()
 {
     if(headers.count("Connection"))
@@ -38,8 +43,6 @@ bool http_request::isKeepAlive()
 
 HTTP_CODE http_request::parser(buffer& buf)
 {
-    std::string partition = "\r\n", line;
-    int pos;
     // std::cout<<"buf = "<<buf<<std::endl;
     while(!buf.empty())
     {
@@ -72,18 +75,24 @@ HTTP_CODE http_request::parser(buffer& buf)
             break;
         
         case CONTENT:
-            if(!parseContent(buf))
-            {
-                if(method == "POST" && check_post_state == POST_CONTENT)
-                {
-                    break;
-                }else{
-                    check_state = FINISH;
-                    return BAD_REQUEST;
-                }
+            post_code = parseContent(buf);
+            // 没有post或post解析完毕
+            if(post_code == NO_POST || post_code == POST_GET_CONTENT){
+                check_state = FINISH;
+                return GET_REQUEST;
             }
-            check_state = FINISH;
-            return GET_REQUEST;
+            // 内容不完整
+            else if(post_code == POST_CONTENT_CONTINUE){
+                break;
+            }
+            // post请求出错
+            else if(post_code == POST_FAILED || post_code == POST_FILE_EXISTED){
+                check_state = FINISH;
+                return BAD_REQUEST;
+            }else{
+                check_state = FINISH;
+                return BAD_REQUEST;
+            }
 
         default:
             break;
@@ -187,11 +196,11 @@ bool http_request::parseRequestHead(buffer& buf)
 }
 
 
-bool http_request::parseContent(buffer& buf)
+POST_CODE http_request::parseContent(buffer& buf)
 {
     if(method == "GET")
     {
-        return true;
+        return NO_POST;
     }
     // post需要解析表单字段, 将post的内容写入文件中
     std::string line;
@@ -212,8 +221,8 @@ bool http_request::parseContent(buffer& buf)
                 sep = line;
                 check_post_state = POST_FORMER;
             }else{
+                return POST_FAILED;
                 LOG_DEBUG("fd: %d, while checking post content, the first line is not the seperator, the first line of content is: %s", fd, line.c_str());
-                return false;
             }
         }
         if(check_post_state == POST_FORMER)
@@ -249,7 +258,7 @@ bool http_request::parseContent(buffer& buf)
         if(check_post_state == POST_CONTENT)
         {
             if(upload_file.size() == 0 || sep.size() == 0){
-                return false;
+                return POST_FAILED;
             }
             // 判断最后的字符是不是 sep--\r\n
             size_t readable = buf.readAbleBytes();
@@ -263,6 +272,17 @@ bool http_request::parseContent(buffer& buf)
             std::string file_path = res_dir + upload_file;
             std::ofstream f;
             if(first_write){
+                if(access(file_path.c_str(), F_OK) == 0){
+                    LOG_DEBUG("fd: %d, the upload file %s is existed in filedir", fd, file_path.c_str());
+                    pos = upload_file.find('.');
+                    if(pos != -1){
+                        std::string pre = upload_file.substr(0, pos);
+                        upload_file = pre + "_copy" + upload_file.erase(0, pos);
+                    }else{
+                        upload_file = upload_file + "_copy";
+                    }
+                    file_path = res_dir + upload_file;
+                }
                 f.open(file_path, std::ios::out);
                 first_write = false;
             }else{
@@ -281,6 +301,7 @@ bool http_request::parseContent(buffer& buf)
                 buf.delAll();
                 LOG_DEBUG("fd: %d, filename: %s is upload sucessfully!", fd, upload_file.c_str());
                 check_post_state = POST_CHECK_FINISH;
+                return POST_GET_CONTENT;
             }else{
                 f.write(buf.peek(), readable);
                 buf.delAll();
@@ -289,7 +310,7 @@ bool http_request::parseContent(buffer& buf)
             break;
         }
     }
-    return check_post_state == POST_CHECK_FINISH;
+    return POST_CONTENT_CONTINUE;
 }
 
 

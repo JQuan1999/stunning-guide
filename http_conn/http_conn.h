@@ -44,7 +44,8 @@ private:
     char ip[20];
     uint32_t conn_mode; // 事件类型
     HTTP_CODE parse_code;
-
+    POST_CODE post_code;
+    
     std::unique_ptr<buffer> read_buffer;
     std::unique_ptr<buffer> write_buffer;
     std::unique_ptr<http_request> m_request; // 请求解析
