@@ -2,7 +2,7 @@
 #define SERVER
 
 #define MAX_FD 65535
-#define IP "127.0.0.1"
+#define IP "0.0.0.0"
 #define PORT 12345
 
 #include <sys/socket.h>

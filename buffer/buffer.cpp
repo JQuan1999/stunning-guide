@@ -1,8 +1,9 @@
 #include "buffer.h"
 
-buffer::buffer(int init_size): read_pos(0), write_pos(0)
+buffer::buffer(size_t init_size, size_t max_size): read_pos(0), write_pos(0)
 {
     _buf.resize(init_size, 0);
+    this->max_size = max_size;
 }
 
 
@@ -130,7 +131,17 @@ bool buffer::empty() const
     return read_pos == write_pos;
 }
 
-std::string buffer::toString(size_t len, bool del)
+std::string buffer::subsepstr(std::string sep, bool del)
+{
+    int pos = this->find(sep);
+    if(pos == -1){
+        return "";
+    }
+    std::string ret = this->substr(pos - read_pos + sep.size(), del);
+    return ret;
+}
+
+std::string buffer::substr(size_t len, bool del)
 {
     assert(len > 0 && len <= readAbleBytes());
     std::string ret(peek(), peek() + len);
@@ -176,33 +187,20 @@ char* buffer::beginWrite()
 // 从文件描述符读数据到buf
 int buffer::readFd(int fd, int& save_errno)
 {
-    char buf[65535];
-    struct iovec io_vec[2];
-    // 分开读保证数据读完
     const size_t writeable = writeAbleBytes();
-    io_vec[0].iov_base = beginPtr() + write_pos;
-    io_vec[0].iov_len = writeable;
-
-    io_vec[1].iov_base = buf;
-    io_vec[1].iov_len = 65535;
-
-    int ret = readv(fd, io_vec, 2);
+    int ret = read(fd, beginPtr(), writeable);
     if(ret < 0)
     {
         save_errno = errno;
-    }else if(ret < writeable)
+    }else if(ret <= writeable)
     {
         write_pos += ret;
-    }else{
-        // 将buf中的数据append到_buf
-        write_pos = _buf.size(); // 已在尾部
-        append(buf, ret - writeable);
     }
-    // if(ret > 0)
-    // {
-    //     std::string str(peek(), peek() + ret);
-    //     std::cout<<"read "<<ret<<"bytes data from client"<<"str: "<<str<<std::endl;
-    // }
+    // 当从fd写满且buf_size < max_size时 扩容两倍
+    if(ret == writeable && _buf.size() < max_size)
+    {
+        _buf.resize(2 * _buf.size()); 
+    }
     return ret;
 }
 

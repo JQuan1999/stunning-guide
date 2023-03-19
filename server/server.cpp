@@ -127,7 +127,7 @@ void server::_acceptClientResquest()
 
     if(users.size() >= MAX_FD)
     {
-        LOG_INFO("客户连接数目过多, 断开客户连接connfd = %d", connfd);
+        LOG_INFO("too many client connection, server closed the connfd: %d", connfd);
         close(connfd);
         return;
     }
@@ -139,7 +139,7 @@ void server::_addClient(int fd, sockaddr_in address)
 {
     // 待实现：添加定时器
     users[fd].init(fd, address, resource_dir, htmls_dir, conn_mode);
-    LOG_INFO("接受到新连接, connfd = %d, ip = %s, port = %d", fd, users[fd].getIp(), users[fd].getPort());
+    LOG_INFO("accept new connection from client, connfd = %d, ip = %s, port = %d", fd, users[fd].getIp(), users[fd].getPort());
     m_epoll_ptr->addFd(fd, EPOLLIN | conn_mode);
     _setNoBlocking(fd);
 }
@@ -149,32 +149,8 @@ void server::_removeClient(int fd)
 {
     // 待实现：移除定时器
     assert(m_epoll_ptr->removeFd(fd) != -1);
-    LOG_INFO("断开客户端连接, connfd = %d, ip = %s, port = %d", fd, users[fd].getIp(), users[fd].getPort());
+    LOG_INFO("close client connection, connfd = %d, ip = %s, port = %d", fd, users[fd].getIp(), users[fd].getPort());
     users[fd].closeData();
-}
-
-
-void server::_onRead(int fd)
-{
-    int ret = 0, save_errno;
-    ret = users[fd].httpRead(save_errno);
-    // 小于0表示客户端已断开连接 正常返回值 = -1 且error = EAGAIN表示数据已读完
-    // std::cout<<"fd: "<<fd <<"read data:\n "<<users[fd].getReadBuf();
-    if(ret <= 0 && save_errno != EAGAIN)
-    {
-        _removeClient(fd);
-        return;
-    }
-
-    if(users[fd].process())
-    {
-        LOG_DEBUG("fd: %d, 数据读取完毕注册写事件", fd);
-        m_epoll_ptr->modifyFd(fd, EPOLLOUT | conn_mode); // 加上conn_ev_type
-    }else
-    {
-        LOG_DEBUG("fd: %d, 数据未读完继续进行读取", fd);
-        m_epoll_ptr->modifyFd(fd, EPOLLIN | conn_mode);
-    }
 }
 
 
@@ -187,6 +163,21 @@ void server::_dealRead(int fd)
         _onRead(fd);
     };
     t_pool->append(task);
+}
+
+
+// 循环读边读边解析
+void server::_onRead(int fd)
+{
+    if(users[fd].httpRead())
+    {
+        LOG_DEBUG("fd: %d, data has read over, add epollout event", fd);
+        m_epoll_ptr->modifyFd(fd, EPOLLOUT | conn_mode); // 加上conn_ev_type
+    }else
+    {
+        LOG_DEBUG("fd: %d, error has happened while read data", fd);
+        _removeClient(fd);
+    }
 }
 
 
@@ -203,37 +194,19 @@ void server::_dealWrite(int fd)
 
 void server::_onWrite(int fd)
 {
-    int ret = 0, save_errno;
-    ret = users[fd].httpWrite(save_errno);
-    if(ret == 0)
+    if(users[fd].httpWrite())
     {
-        // 传输完成
-        if(users[fd].isKeepAlive())
-        {
-            LOG_DEBUG("fd: %d, 数据发送完毕, 注册读事件", fd);
+        if(users[fd].isKeepAlive()){
+            LOG_DEBUG("fd: %d, write sucessfuly, modify fd EPOLLIN event", fd);
             m_epoll_ptr->modifyFd(fd, EPOLLIN | conn_mode);
             return;
-        }
-        else{
-            LOG_DEBUG("fd: %d, 数据发送完毕, 关闭连接", fd);
+        }else{
+            LOG_DEBUG("fd: %d, write sucessfuly close connection", fd);
             _removeClient(fd);
         }
-        
-    }
-    else if(ret < 0)
-    {
-        if(save_errno == EAGAIN)
-        {
-            // 继续传输
-            LOG_DEBUG("fd: %d, 数据未发送完, 继续进行写", fd);
-            m_epoll_ptr->modifyFd(fd, EPOLLOUT | conn_mode);
-            return;
-        }
-        else
-        {
-            LOG_DEBUG("fd: %d, 故障发生关闭连接", fd);
-            _removeClient(fd);
-        }
+    }else{
+        LOG_ERROR("fd: %d, something error has happen close connection", fd);
+        _removeClient(fd);
     }
 }
 
@@ -254,7 +227,7 @@ void server::run()
             else if(sockfd == pipefd[0] && (events & EPOLLIN))
             {
                 // 接收到中止信号
-                LOG_INFO("==============接收到中止信号服务器关闭=================");
+                LOG_INFO("==============receive stop singal server stop=================");
                 _stop();
             }
             // 监听到connfd上的读事件

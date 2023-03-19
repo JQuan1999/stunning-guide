@@ -36,21 +36,24 @@ public:
 
 private:
     
-    bool parseRequestLine(const std::string&);
-    bool parseRequestHead(const std::string& );
+    bool parseRequestLine(buffer&);
+    bool parseRequestHead(buffer&);
     bool parseContent(buffer&);
-    void _remove(const std::string&);
 
     CHECK_STATE check_state;
+    CHECK_POST_CONTENT check_post_state;
     HTTP_CODE http_code;
     int fd;
+    bool first_write;
+
     std::string res_dir; 
     std::string req_mode; // get请求是上传还是下载
     std::string method; // 请求方式
     std::string url; // 请求地址
     std::string version; // http请求版本
+    std::string sep; // 分隔符
+    std::string upload_file; // 上传文件名
     std::unordered_map<std::string, std::string> headers;
-    std::unordered_map<std::string, std::string> post_former; // Post表单信息
 };
 
 #endif

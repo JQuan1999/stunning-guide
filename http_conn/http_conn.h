@@ -22,11 +22,12 @@ public:
     httpConn();
     void init(int, sockaddr_in, const std::string&, const std::string&,  uint32_t);
     ~httpConn();
-    int httpRead(int&);
+    bool httpRead();
+    bool httpWrite();
     bool parseHttpRequest();
     bool process();
     bool isKeepAlive();
-    int httpWrite(int&);
+    
     void closeData();
     const char* getIp();
     const int getPort();
@@ -42,6 +43,7 @@ private:
     int port;
     char ip[20];
     uint32_t conn_mode; // 事件类型
+    HTTP_CODE parse_code;
 
     std::unique_ptr<buffer> read_buffer;
     std::unique_ptr<buffer> write_buffer;

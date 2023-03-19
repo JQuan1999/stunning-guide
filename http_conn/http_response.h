@@ -30,6 +30,7 @@ public:
     const char* getFileAddress();
 
 private:
+    void _remove(const std::string&);
     void _initDownLoad(const std::string&);
     void _initOthers(const std::string&);
     void _updateIndexHtml();

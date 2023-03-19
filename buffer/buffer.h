@@ -13,7 +13,7 @@
 class buffer
 {
 public:
-    buffer(int init_size = 1024);
+    buffer(size_t init_size = 1024, size_t max_size = 65535);
     ~buffer();
     size_t readAbleBytes() const;
     size_t writeAbleBytes() const;
@@ -29,7 +29,8 @@ public:
 
     void deln(size_t);
     void delAll();
-    std::string toString(size_t, bool del = true);
+    std::string subsepstr(std::string, bool del = true);
+    std::string substr(size_t, bool del = true);
 
     const char* peek() const;
     const char* end() const;
@@ -57,6 +58,7 @@ private:
     std::vector<char> _buf;
     size_t write_pos;
     size_t read_pos;
+    size_t max_size;
 };
 
 #endif

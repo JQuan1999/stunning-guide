@@ -86,14 +86,35 @@ void http_response::init(HTTP_CODE http_code, bool keep_alive, const std::string
     method = http_method;
     mode = get_mode;
     _updateIndexHtml();
-
+    
+    if(mode == "delete"){
+        _remove(url);
+    }
     // 初始化 request url和abs_path
     if(method == "GET" && mode == "download"){
         _initDownLoad(url);
     }else{
         _initOthers(url);
     }
-    LOG_DEBUG("fd: %d, 请求url: %s, 状态码: %d, 修正之后的请求文件路径为:%s", fd, url.c_str(), code, request_file.c_str());
+    LOG_DEBUG("fd: %d, request url: %s, httpcode: %d, the returned file path:%s", fd, url.c_str(), code, request_file.c_str());
+}
+
+
+void http_response::_remove(const std::string& url)
+{
+    struct stat st;
+    std::string file_path = res_dir + url;
+    // 文件路径存在且不是目录
+    if(stat(file_path.c_str(), &st) == 0 && !S_ISDIR(st.st_mode)){
+        int ret = remove(file_path.c_str());
+        if(ret == 0){
+            LOG_INFO("fd: %d, the client request delete the file: %s, delete sucessfully!", fd, url.c_str());
+        }else{
+            LOG_INFO("fd: %d, the client request delete the file: %s, delete failed!", fd, url.c_str());
+        }
+    }else{
+        LOG_INFO("fd: %d, the filepath of the delete file: %s has problem, delete failed!", fd, url.c_str());
+    }
 }
 
 
@@ -136,7 +157,6 @@ size_t http_response::getFileBytes()
 
 void http_response::_updateIndexHtml()
 {
-    
     std::string index_content, temp_line;
     std::string filelist_path = htmls_dir + list_html;
     assert(access(filelist_path.c_str(), F_OK) == 0); // 文件路径存在
@@ -227,8 +247,10 @@ void http_response::_writeHeader(buffer& write_buf)
     // 文件类型(根据request_file文件类型回复content-type)
     if(method == "GET" && mode == "download"){
         int pos = request_file.find('.');
-        assert(pos != -1);
-        std::string suffix = request_file.substr(pos, request_file.size() - pos);
+        std::string suffix;
+        if(pos != -1){
+            suffix = request_file.substr(pos, request_file.size() - pos);
+        }
         if(suffix_type.count(suffix)){
             write_buf += "Content-type: " + suffix_type[suffix] + "\r\n";
         }else{
@@ -240,14 +262,12 @@ void http_response::_writeHeader(buffer& write_buf)
     write_buf += "Content-Length: " + std::to_string(file_stat.st_size) + "\r\n\r\n";
 }
 
+
 // 写入传输内容
 void http_response::_writeContent(buffer& write_buf)
 {
     int src_fd = open(request_file.c_str(), O_RDONLY);
     assert(src_fd > 0);
-    // 将文件映射到内存
-    // 输出日志
-    // std::cout<<...
     int* ret = (int*)mmap(nullptr, file_stat.st_size, PROT_READ, MAP_PRIVATE, src_fd, 0);
     assert(*ret != -1);
 
