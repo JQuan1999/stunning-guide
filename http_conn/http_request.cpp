@@ -207,7 +207,7 @@ POST_CODE http_request::parseContent(buffer& buf)
     int pos = -1;
     // 解析流程：1 解析分隔符 2 解析表单字段 3 解析内容
     // 只支持解析上传文件的post请求multipart/form-data
-    while(check_post_state != POST_CHECK_FINISH && !buf.empty())
+    while(check_post_state != POST_FINISH && !buf.empty())
     {
         if(check_post_state == POST_SEPE)
         {
@@ -300,7 +300,7 @@ POST_CODE http_request::parseContent(buffer& buf)
                 f.write(buf.peek(), readable - last_len); // 减去\r\n + sep--\r\n
                 buf.delAll();
                 LOG_DEBUG("fd: %d, filename: %s is upload sucessfully!", fd, upload_file.c_str());
-                check_post_state = POST_CHECK_FINISH;
+                check_post_state = POST_FINISH;
                 return POST_GET_CONTENT;
             }else{
                 f.write(buf.peek(), readable);

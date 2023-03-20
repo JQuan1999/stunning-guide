@@ -19,7 +19,7 @@ enum CHECK_POST_CONTENT
     POST_SEPE = 0,
     POST_FORMER,
     POST_CONTENT,
-    POST_CHECK_FINISH
+    POST_FINISH
 };
 
 // http解析状态

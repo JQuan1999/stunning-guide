@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <fstream>
 #include <vector>
+#include <algorithm>
 #include <dirent.h>
 
 #include "http_enum.h"

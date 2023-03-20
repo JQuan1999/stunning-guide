@@ -268,9 +268,11 @@ void http_response::_writeHeader(buffer& write_buf)
     std::string suffix;
     if(pos != -1){
         suffix = request_file.substr(pos, request_file.size() - pos);
+        std::transform(suffix.begin(), suffix.end(), suffix.begin(), tolower);
+        // std::cout<<"suffix = "<<suffix<<std::endl;
     }
     if(suffix_type.count(suffix)){
-        write_buf += "Content-type: " + suffix_type[suffix] + "; chartset=UTF-8\r\n";
+        write_buf += "Content-type: " + suffix_type[suffix] + "\r\n";
     }else{
         write_buf += "Content-type: text/html; chartset=UTF-8\r\n";
     }

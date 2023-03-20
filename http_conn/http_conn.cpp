@@ -85,8 +85,10 @@ bool httpConn::httpRead()
         if(parse_code == NO_REQUEST){
             continue;
         }else if(parse_code == BAD_REQUEST){
+            // std::cout<<"get bad request"<<std::endl;
             return false;
         }else if(parse_code == GET_REQUEST){
+            // std::cout<<"get request"<<std::endl;
             return true;
         }
     } while (conn_mode & EPOLLET);
@@ -111,7 +113,6 @@ bool httpConn::httpWrite()
         m_iv[1].iov_len = m_response->getFileBytes();
         m_iv_cnt += 1;
     }
-
     int len = -1;
     do{
         len = writev(sockfd, m_iv, m_iv_cnt);
@@ -141,6 +142,6 @@ bool httpConn::httpWrite()
             write_buffer->deln(len);
         }
     }while(conn_mode & EPOLLET);
-    
+    LOG_DEBUG("the file size is %d bytes, send to client sucessfully", m_response->getFileBytes());
     return true;
 }
